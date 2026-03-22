@@ -1,3 +1,25 @@
 body {
   margin: 0;
 }
+
+/* 表格在横向滚动容器内铺满（Semi Table 根节点默认可能不拉满） */
+.plant-table-scroll-wrap .semi-table-wrapper {
+  width: 100%;
+}
+
+/* 「标为目标植物」等操作：与目标植物 Tag 一致的绿色，区别于默认/主色按钮 */
+.plant-console-btn-target-plant.semi-button {
+  background-color: var(--semi-color-success);
+  border-color: var(--semi-color-success);
+  color: var(--semi-color-white);
+}
+.plant-console-btn-target-plant.semi-button:hover:not(.semi-button-disabled) {
+  background-color: var(--semi-color-success-hover);
+  border-color: var(--semi-color-success-hover);
+  color: var(--semi-color-white);
+}
+.plant-console-btn-target-plant.semi-button:active:not(.semi-button-disabled) {
+  background-color: var(--semi-color-success-active);
+  border-color: var(--semi-color-success-active);
+  color: var(--semi-color-white);
+}
