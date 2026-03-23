@@ -13,7 +13,7 @@ def now_ts() -> str:
 @contextmanager
 def get_conn() -> Iterator[sqlite3.Connection]:
     ensure_directories()
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     try:
         yield conn
