@@ -1,5 +1,5 @@
 import { Button, Checkbox, Space, Typography } from '@douyinfe/semi-ui';
-import type { CSSProperties } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 import { apiUrl } from '@/api/client';
 import type { ImageItem } from './types';
 import type { PlantConsoleApi } from './usePlantConsole';
@@ -21,6 +21,15 @@ export function PreviewDrawer({
   previewItem: ImageItem | null;
   previewInfo: { label: string | null; reviewed: boolean } | null;
 }) {
+  useEffect(() => {
+    if (!pc.previewOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [pc.previewOpen]);
+
   return (
     <div
       style={{
@@ -30,19 +39,28 @@ export function PreviewDrawer({
         height: '100vh',
         width: 'min(56vw, 860px)',
         maxWidth: '100vw',
-        background: '#1c1f23',
-        color: 'rgba(255,255,255,0.88)',
-        borderLeft: '1px solid #3f4a5a',
-        boxShadow: '-8px 0 24px rgba(0,0,0,0.35)',
+        background: 'var(--semi-color-bg-2)',
+        color: 'var(--semi-color-text-0)',
+        borderLeft: '1px solid var(--semi-color-border)',
+        boxShadow: 'var(--semi-shadow-elevated)',
         zIndex: 400,
         transform: pc.previewOpen ? 'translateX(0)' : 'translateX(100%)',
         transition: 'transform 0.2s ease',
         display: 'flex',
         flexDirection: 'column',
       }}
+      onWheelCapture={(e) => {
+        if (pc.previewOpen) e.preventDefault();
+      }}
       aria-hidden={!pc.previewOpen}
     >
-      <Space wrap style={{ padding: 10, borderBottom: '1px solid #3f4a5a' }}>
+      <Space
+        wrap
+        style={{
+          padding: 10,
+          borderBottom: '1px solid var(--semi-color-border)',
+        }}
+      >
         <Button theme="outline" onClick={pc.closePreview}>
           关闭(Esc)
         </Button>
@@ -94,22 +112,20 @@ export function PreviewDrawer({
             pc.openPreviewByIndex(pc.previewIndex < 0 ? 0 : pc.previewIndex);
           }}
         >
-          <Text style={{ color: 'rgba(255,255,255,0.75)' }}>只看未复核(U)</Text>
+          <Text type="tertiary">只看未复核(U)</Text>
         </Checkbox>
-        <Text style={{ color: 'rgba(255,255,255,0.45)' }}>
+        <Text type="tertiary">
           当前 {pc.previewOpen ? pc.previewIndex + 1 : 0}/
           {pc.currentImageItems.length}
         </Text>
-        <Text style={{ color: 'rgba(255,255,255,0.45)' }}>
-          未复核剩余：{pc.getUnreviewedRemainCount()}
-        </Text>
+        <Text type="tertiary">未复核剩余：{pc.getUnreviewedRemainCount()}</Text>
       </Space>
       <div
         style={{
           position: 'relative',
           flex: 1,
           overflow: 'hidden',
-          background: '#030712',
+          background: 'var(--semi-color-fill-0)',
           touchAction: 'none',
         }}
         onWheel={(e) => {
@@ -138,24 +154,28 @@ export function PreviewDrawer({
         )}
       </div>
       <div
-        style={{ padding: 10, borderTop: '1px solid #3f4a5a', fontSize: 12 }}
+        style={{
+          padding: 10,
+          borderTop: '1px solid var(--semi-color-border)',
+          fontSize: 12,
+        }}
       >
         <Space wrap style={{ marginBottom: 8 }} align="center">
-          <span style={{ color: 'rgba(255,255,255,0.75)' }}>标签</span>
+          <span style={{ color: 'var(--semi-color-text-2)' }}>标签</span>
           <LabelStatusTag label={previewInfo?.label} />
           <span
             style={{
-              padding: '4px 8px',
+              padding: '1px 8px',
               borderRadius: 999,
-              border: '1px solid #5a6578',
-              background: '#2a323d',
+              border: '1px solid var(--semi-color-border)',
+              background: 'var(--semi-color-fill-0)',
             }}
           >
             复核: {previewInfo ? (previewInfo.reviewed ? '是' : '否') : '-'}
           </span>
         </Space>
         <div>{previewItem?.filename ?? '-'}</div>
-        <div style={{ ...mono, color: 'rgba(255,255,255,0.45)' }}>
+        <div style={{ ...mono, color: 'var(--semi-color-text-2)' }}>
           {previewItem?.storage_path ?? '-'}
         </div>
       </div>

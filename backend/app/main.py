@@ -198,6 +198,26 @@ def api_train_start(req: TrainStartRequest) -> TrainStartResponse:
             ),
         )
 
+    base_for_insert: Optional[str] = None
+    if req.mode == "continue":
+        if not req.base_version or not str(req.base_version).strip():
+            raise HTTPException(
+                status_code=400,
+                detail="继续训练必须指定基础版本（从已有模型版本中选择）。",
+            )
+        bv = str(req.base_version).strip()
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT version FROM model_versions WHERE version=?",
+                (bv,),
+            ).fetchone()
+        if not row:
+            raise HTTPException(
+                status_code=400,
+                detail=f"基础版本不存在: {bv}。请先在「模型版本」中确认已有该版本。",
+            )
+        base_for_insert = bv
+
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -205,7 +225,7 @@ def api_train_start(req: TrainStartRequest) -> TrainStartResponse:
             INSERT INTO train_jobs (mode, base_version, status, created_at)
             VALUES (?, ?, 'queued', ?)
             """,
-            (req.mode, req.base_version, now_ts()),
+            (req.mode, base_for_insert, now_ts()),
         )
         job_id = cur.lastrowid
 

@@ -137,6 +137,18 @@ def import_uploaded_files(files: list, extensions: Optional[list[str]] = None) -
     return {"imported": imported, "duplicates": duplicates, "skipped": skipped}
 
 
+def _fail_train_job(job_id: int, message: str) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE train_jobs
+            SET status='failed', finished_at=?, error_message=?
+            WHERE id=?
+            """,
+            (now_ts(), message, job_id),
+        )
+
+
 def run_train_job(job_id: int) -> None:
     with get_conn() as conn:
         cur = conn.cursor()
@@ -144,6 +156,15 @@ def run_train_job(job_id: int) -> None:
             "UPDATE train_jobs SET status='running', started_at=? WHERE id=?",
             (now_ts(), job_id),
         )
+
+        job = cur.execute(
+            "SELECT mode, base_version FROM train_jobs WHERE id=?",
+            (job_id,),
+        ).fetchone()
+        if not job:
+            return
+        mode = job["mode"] or "new"
+        base_version = (job["base_version"] or "").strip()
 
         count_target = cur.execute(
             "SELECT COUNT(1) AS c FROM labels WHERE label='target_plant'"
@@ -167,42 +188,81 @@ def run_train_job(job_id: int) -> None:
     model_dir = MODELS_DIR / version
     model_dir.mkdir(parents=True, exist_ok=True)
 
+    base_ckpt: Optional[Path] = None
+    if mode == "continue":
+        if not base_version:
+            _fail_train_job(job_id, "继续训练缺少基础版本")
+            return
+        base_ckpt = MODELS_DIR / base_version / "model.pt"
+        if USE_REAL_TRAINING and not base_ckpt.is_file():
+            _fail_train_job(
+                job_id,
+                f"基础版本「{base_version}」目录下缺少 model.pt（需由一次成功的真实训练生成）。"
+                " 若仅使用模拟训练，请改用「新训练」或先开启 USE_REAL_TRAINING 完成真实训练。",
+            )
+            return
+
     if USE_REAL_TRAINING:
         try:
             split_stats = prepare_train_val_split(train_ratio=0.8)
-            train_result = train_with_pytorch(version=version)
+            train_result = train_with_pytorch(
+                version=version,
+                base_checkpoint=base_ckpt if base_ckpt and base_ckpt.is_file() else None,
+            )
             metrics = train_result["metrics"]
             model_path = train_result["model_path"]
             metrics["split"] = split_stats
         except Exception as e:
-            with get_conn() as conn:
-                conn.execute(
-                    """
-                    UPDATE train_jobs
-                    SET status='failed', finished_at=?, error_message=?
-                    WHERE id=?
-                    """,
-                    (now_ts(), f"Real training failed: {e}", job_id),
-                )
+            _fail_train_job(job_id, f"Real training failed: {e}")
             return
     else:
         for _ in range(5):
             time.sleep(0.4)
         total = count_target + count_other
         balance = min(count_target, count_other) / max(count_target, count_other)
-        f1 = round(0.70 + 0.25 * balance, 4)
-        precision = round(min(0.99, f1 + 0.02), 4)
-        recall = round(max(0.5, f1 - 0.02), 4)
-        acc = round(min(0.99, 0.65 + total / (total + 200)), 4)
 
-        metrics = {
-            "acc": acc,
-            "precision": precision,
-            "recall": recall,
-            "f1": f1,
-            "samples": total,
-            "engine": "simulated",
-        }
+        if mode == "continue" and base_version:
+            with get_conn() as conn:
+                row = conn.execute(
+                    "SELECT metrics_json FROM model_versions WHERE version=?",
+                    (base_version,),
+                ).fetchone()
+            if not row:
+                _fail_train_job(job_id, f"基础版本不存在: {base_version}")
+                return
+            try:
+                parent_metrics = json.loads(row["metrics_json"] or "{}")
+            except json.JSONDecodeError:
+                parent_metrics = {}
+            acc = float(parent_metrics.get("acc", 0.75))
+            f1 = float(parent_metrics.get("f1", acc))
+            acc = min(0.99, round(acc + 0.02, 4))
+            f1 = min(0.99, round(f1 + 0.015, 4))
+            precision = round(min(0.99, f1 + 0.02), 4)
+            recall = round(max(0.5, f1 - 0.02), 4)
+            metrics = {
+                "acc": acc,
+                "precision": precision,
+                "recall": recall,
+                "f1": f1,
+                "samples": total,
+                "engine": "simulated",
+                "continued_from": base_version,
+            }
+        else:
+            f1 = round(0.70 + 0.25 * balance, 4)
+            precision = round(min(0.99, f1 + 0.02), 4)
+            recall = round(max(0.5, f1 - 0.02), 4)
+            acc = round(min(0.99, 0.65 + total / (total + 200)), 4)
+
+            metrics = {
+                "acc": acc,
+                "precision": precision,
+                "recall": recall,
+                "f1": f1,
+                "samples": total,
+                "engine": "simulated",
+            }
         model_path_obj = model_dir / "model.onnx"
         model_path_obj.write_text(
             json.dumps({"model_version": version, "metrics": metrics}, ensure_ascii=True, indent=2),

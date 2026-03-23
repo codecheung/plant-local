@@ -2,6 +2,7 @@ import json
 import random
 import shutil
 from pathlib import Path
+from typing import Optional
 
 from .config import MODELS_DIR, SPLIT_TRAIN_DIR, SPLIT_VAL_DIR
 from .db import get_conn
@@ -55,7 +56,9 @@ def prepare_train_val_split(train_ratio: float = 0.8) -> dict:
     return split_stats
 
 
-def train_with_pytorch(version: str) -> dict:
+def train_with_pytorch(
+    version: str, base_checkpoint: Optional[Path] = None
+) -> dict:
     try:
         import torch
         import torch.nn as nn
@@ -90,10 +93,19 @@ def train_with_pytorch(version: str) -> dict:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = models.resnet18(weights=None)
     model.fc = nn.Linear(model.fc.in_features, 2)
+    if base_checkpoint is not None and base_checkpoint.is_file():
+        try:
+            state = torch.load(
+                str(base_checkpoint), map_location=device, weights_only=True
+            )
+        except TypeError:
+            state = torch.load(str(base_checkpoint), map_location=device)
+        model.load_state_dict(state)
     model.to(device)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    lr = 1e-4 if base_checkpoint is not None and base_checkpoint.is_file() else 1e-3
+    optimizer = optim.Adam(model.parameters(), lr=lr)
     train_loader = DataLoader(train_ds, batch_size=16, shuffle=True, num_workers=0)
     val_loader = DataLoader(val_ds, batch_size=16, shuffle=False, num_workers=0)
 
@@ -148,5 +160,7 @@ def train_with_pytorch(version: str) -> dict:
         "samples": len(train_ds) + len(val_ds),
         "engine": "pytorch",
     }
+    if base_checkpoint is not None and base_checkpoint.is_file():
+        metrics["continued_from"] = base_checkpoint.parent.name
     (model_dir / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=True, indent=2), encoding="utf-8")
     return {"metrics": metrics, "model_path": str(onnx_path)}

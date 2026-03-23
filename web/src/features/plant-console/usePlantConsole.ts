@@ -67,7 +67,8 @@ export function usePlantConsole() {
   const [opLogs, setOpLogs] = useState<LabelOp[]>([]);
 
   const [trainMode, setTrainMode] = useState('new');
-  const [baseVersion, setBaseVersion] = useState('');
+  /** 继续训练时选中的 model_versions.version */
+  const [trainBaseVersion, setTrainBaseVersion] = useState('');
   const [trainJobId, setTrainJobId] = useState('');
   const [trainMsg, setTrainMsg] = useState<{
     ok: boolean;
@@ -218,47 +219,51 @@ export function usePlantConsole() {
     return i;
   }, []);
 
+  const fetchImageListPage = useCallback(
+    async (pageNum: number, pageSizeNum: number) => {
+      const q = new URLSearchParams();
+      q.set('page', String(pageNum));
+      q.set('page_size', String(pageSizeNum));
+      const kw = keyword.trim();
+      if (kw) q.set('keyword', kw);
+      if (filterStatus) q.set('status', filterStatus);
+      if (filterLabel) q.set('label', filterLabel);
+      if (filterReviewed) q.set('reviewed', filterReviewed);
+
+      const data = await api<{
+        items: ImageItem[];
+        page: number;
+        total_pages: number;
+        total: number;
+      }>(`/api/images?${q.toString()}`);
+
+      const items = data.items || [];
+      setCurrentImageItems(items);
+      syncInfoFromItems(items);
+      setServerPage(data.page || 1);
+      setTotalPages(data.total_pages || 0);
+      setTotalImageCount(data.total ?? 0);
+      setPageMeta(
+        `共 ${data.total} 条，第 ${data.page}/${Math.max(1, data.total_pages)} 页`,
+      );
+      setFocusedRowIndex((prev) => normalizeFocusIndex(items, prev));
+    },
+    [
+      keyword,
+      filterStatus,
+      filterLabel,
+      filterReviewed,
+      syncInfoFromItems,
+      normalizeFocusIndex,
+    ],
+  );
+
   const refreshImages = useCallback(async () => {
     saveFilterState();
     const p = Number(page || 1);
     const ps = Number(pageSize || 20);
-    const q = new URLSearchParams();
-    q.set('page', String(p));
-    q.set('page_size', String(ps));
-    const kw = keyword.trim();
-    if (kw) q.set('keyword', kw);
-    if (filterStatus) q.set('status', filterStatus);
-    if (filterLabel) q.set('label', filterLabel);
-    if (filterReviewed) q.set('reviewed', filterReviewed);
-
-    const data = await api<{
-      items: ImageItem[];
-      page: number;
-      total_pages: number;
-      total: number;
-    }>(`/api/images?${q.toString()}`);
-
-    const items = data.items || [];
-    setCurrentImageItems(items);
-    syncInfoFromItems(items);
-    setServerPage(data.page || 1);
-    setTotalPages(data.total_pages || 0);
-    setTotalImageCount(data.total ?? 0);
-    setPageMeta(
-      `共 ${data.total} 条，第 ${data.page}/${Math.max(1, data.total_pages)} 页`,
-    );
-    setFocusedRowIndex((prev) => normalizeFocusIndex(items, prev));
-  }, [
-    saveFilterState,
-    page,
-    pageSize,
-    keyword,
-    filterStatus,
-    filterLabel,
-    filterReviewed,
-    syncInfoFromItems,
-    normalizeFocusIndex,
-  ]);
+    await fetchImageListPage(p, ps);
+  }, [saveFilterState, fetchImageListPage, page, pageSize]);
 
   const randomUnlabeled = useCallback(async () => {
     saveFilterState();
@@ -407,46 +412,34 @@ export function usePlantConsole() {
       const current = Number(page || 1);
       if (next === current) return;
       setPage(String(next));
+      pendingFocusIndex.current = 0;
+      setFocusedRowIndex(0);
       saveFilterState();
       const ps = Number(pageSize || 20);
-      const q = new URLSearchParams();
-      q.set('page', String(next));
-      q.set('page_size', String(ps));
-      const kw = keyword.trim();
-      if (kw) q.set('keyword', kw);
-      if (filterStatus) q.set('status', filterStatus);
-      if (filterLabel) q.set('label', filterLabel);
-      if (filterReviewed) q.set('reviewed', filterReviewed);
-      const data = await api<{
-        items: ImageItem[];
-        page: number;
-        total_pages: number;
-        total: number;
-      }>(`/api/images?${q.toString()}`);
-      const items = data.items || [];
-      setCurrentImageItems(items);
-      syncInfoFromItems(items);
-      setServerPage(data.page || 1);
-      setTotalPages(data.total_pages || 0);
-      setTotalImageCount(data.total ?? 0);
-      setPageMeta(
-        `共 ${data.total} 条，第 ${data.page}/${Math.max(1, data.total_pages)} 页`,
-      );
-      setFocusedRowIndex((prev) => normalizeFocusIndex(items, prev));
+      await fetchImageListPage(next, ps);
     },
     [
       page,
       totalPages,
       totalImageCount,
       pageSize,
-      keyword,
-      filterStatus,
-      filterLabel,
-      filterReviewed,
+      fetchImageListPage,
       saveFilterState,
-      syncInfoFromItems,
-      normalizeFocusIndex,
     ],
+  );
+
+  const changePageSizeAndRefresh = useCallback(
+    async (newSize: number) => {
+      const ps = Math.max(1, Math.min(500, newSize));
+      if (Number(pageSize || 20) === ps) return;
+      setPageSize(String(ps));
+      setPage('1');
+      pendingFocusIndex.current = 0;
+      setFocusedRowIndex(0);
+      saveFilterState();
+      await fetchImageListPage(1, ps);
+    },
+    [fetchImageListPage, saveFilterState, pageSize],
   );
 
   const gotoPage = useCallback(
@@ -787,6 +780,37 @@ export function usePlantConsole() {
     }
   }, [reviewJobId, reviewSortOrder, reviewPredClass, reviewLimit]);
 
+  const loadInferReviewResultsByJobId = useCallback(
+    async (jobId: number) => {
+      const id = Number(jobId || 0);
+      if (!id) {
+        setReviewMeta('请先输入识别任务编号');
+        return;
+      }
+      try {
+        const q = new URLSearchParams();
+        q.set('sort_order', reviewSortOrder || 'asc');
+        if (reviewPredClass) q.set('predicted_class', reviewPredClass);
+        q.set(
+          'limit',
+          String(Math.max(1, Math.min(5000, Number(reviewLimit || 200)))),
+        );
+        const data = await api<{
+          items: InferReviewItem[];
+          total: number;
+          job_status: string;
+        }>(`/api/infer/${id}/results/review?${q.toString()}`);
+        setInferReviewItems(data.items || []);
+        setReviewMeta(
+          `任务 ${id}，状态 ${data.job_status}，共 ${data.total} 条`,
+        );
+      } catch (e) {
+        setReviewMeta('加载失败: ' + (e as Error).message);
+      }
+    },
+    [reviewSortOrder, reviewPredClass, reviewLimit],
+  );
+
   const fixReviewLabel = useCallback(
     async (imageId: number, lbl: string) => {
       try {
@@ -930,12 +954,20 @@ export function usePlantConsole() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const tag = (event.target as HTMLElement)?.tagName || '';
+      const el = event.target as HTMLElement | null;
+      const tag = el?.tagName || '';
+      // Checkbox / radio 仍是 <input>，但不应拦截列表快捷键（勾选「连续标注」后焦点常留在复选框上）
+      const inputType =
+        tag === 'INPUT'
+          ? String((el as HTMLInputElement).type || '').toLowerCase()
+          : '';
       const inTyping =
-        tag === 'INPUT' ||
+        (tag === 'INPUT' &&
+          inputType !== 'checkbox' &&
+          inputType !== 'radio') ||
         tag === 'TEXTAREA' ||
         tag === 'SELECT' ||
-        (event.target as HTMLElement)?.isContentEditable;
+        Boolean(el?.isContentEditable);
       if (inTyping) return;
 
       if (event.key === '1') {
@@ -1086,6 +1118,7 @@ export function usePlantConsole() {
     setUndoSteps,
     gotoPage,
     goToAbsolutePage,
+    changePageSizeAndRefresh,
     totalImageCount,
     refreshStats,
     opLogLimit,
@@ -1094,8 +1127,8 @@ export function usePlantConsole() {
     refreshLabelOperations,
     trainMode,
     setTrainMode,
-    baseVersion,
-    setBaseVersion,
+    trainBaseVersion,
+    setTrainBaseVersion,
     trainJobId,
     setTrainJobId,
     trainMsg,
@@ -1129,6 +1162,7 @@ export function usePlantConsole() {
     reviewMeta,
     inferReviewItems,
     loadInferReviewResults,
+    loadInferReviewResultsByJobId,
     fixReviewLabel,
     models,
     refreshModels,

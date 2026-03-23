@@ -2,6 +2,57 @@ body {
   margin: 0;
 }
 
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--semi-color-bg-0);
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.auth-card.semi-card {
+  background: var(--semi-color-bg-2);
+  border-color: var(--semi-color-border);
+}
+
+.app-nav-wrap {
+  min-height: 100vh;
+  background: var(--semi-color-bg-0);
+}
+
+.app-nav-wrap .semi-navigation {
+  position: sticky;
+  top: 0;
+  z-index: 300;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--semi-color-border);
+  backdrop-filter: blur(6px);
+}
+
+.app-nav-wrap .semi-navigation .semi-navigation-inner {
+  max-width: 1150px;
+  margin: 0 auto;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.app-user-dropdown {
+  color: var(--semi-color-text-0);
+}
+
+.app-user-name {
+  color: var(--semi-color-text-0);
+}
+
+body[theme-mode='dark'] .app-user-name {
+  color: var(--semi-color-text-0) !important;
+}
+
 /* 表格在横向滚动容器内铺满（Semi Table 根节点默认可能不拉满） */
 .plant-table-scroll-wrap .semi-table-wrapper {
   width: 100%;
@@ -22,4 +73,24 @@ body {
   background-color: var(--semi-color-success-active);
   border-color: var(--semi-color-success-active);
   color: var(--semi-color-white);
+}
+
+/* 收紧「连续标注模式」行，避免默认控件行高把区域撑大 */
+.quick-mode-row {
+  margin: 0;
+  padding: 0;
+}
+.quick-mode-row .semi-checkbox {
+  margin: 0;
+  line-height: 16px;
+  display: inline-flex;
+  align-items: center;
+}
+.quick-mode-row .semi-checkbox .semi-checkbox-content {
+  line-height: 16px;
+  margin: 0;
+}
+.quick-mode-row .semi-typography {
+  margin: 0;
+  line-height: 16px;
 }

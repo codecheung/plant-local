@@ -10,9 +10,12 @@
     "preview": "rsbuild preview"
   },
   "dependencies": {
+    "@douyinfe/semi-icons-lab": "^2.93.0",
     "@douyinfe/semi-ui": "^2.93.0",
+    "dayjs": "^1.11.20",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "react-router-dom": "^7.13.1"
   },
   "devDependencies": {
     "@rsbuild/core": "^1.7.1",
