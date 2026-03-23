@@ -7,7 +7,7 @@ import shutil
 import time
 import uuid
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 from .config import MODELS_DIR, PREDICTIONS_DIR, RAW_DIR, USE_REAL_TRAINING
 from .db import get_conn, now_ts
@@ -29,7 +29,7 @@ def _iter_images(source_dir: Path, extensions: Iterable[str]) -> Iterable[Path]:
             yield p
 
 
-def import_images(source_dir: str, copy_to_raw: bool, extensions: list[str]) -> dict:
+def import_images(source_dir: str, copy_to_raw: bool, extensions: List[str]) -> Dict[str, int]:
     src = Path(source_dir).expanduser().resolve()
     if not src.exists() or not src.is_dir():
         raise ValueError(f"source_dir not exists: {src}")
@@ -72,7 +72,9 @@ def import_images(source_dir: str, copy_to_raw: bool, extensions: list[str]) -> 
     return {"imported": imported, "duplicates": duplicates, "skipped": skipped}
 
 
-def import_uploaded_files(files: list, extensions: Optional[list[str]] = None) -> dict:
+def import_uploaded_files(
+    files: List[Any], extensions: Optional[List[str]] = None
+) -> Dict[str, int]:
     allowed = set((extensions or [".jpg", ".jpeg", ".png", ".webp"]))
     allowed = {e.lower() for e in allowed}
 
@@ -402,7 +404,7 @@ def publish_model(version: str, note: Optional[str] = None) -> None:
         )
 
 
-def save_labels_with_history(items: list[dict]) -> dict:
+def save_labels_with_history(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not items:
         return {"saved": 0, "operation_id": None}
 
@@ -481,7 +483,7 @@ def undo_label_operations(steps: int = 1) -> dict:
             op_ids,
         ).fetchall()
 
-        reverted_ids: set[int] = set()
+        reverted_ids: Set[int] = set()
         for ev in event_rows:
             image_id = ev["image_id"]
             old_label = ev["old_label"]
@@ -512,7 +514,7 @@ def undo_label_operations(steps: int = 1) -> dict:
     return {"operations_undone": len(op_ids), "reverted_items": len(reverted_ids)}
 
 
-def list_label_operations(limit: int = 20) -> list[dict]:
+def list_label_operations(limit: int = 20) -> List[Dict[str, Any]]:
     safe_limit = min(100, max(1, int(limit)))
     with get_conn() as conn:
         rows = conn.execute(
@@ -546,7 +548,7 @@ def list_images(
     offset = (page - 1) * page_size
 
     where = ["1=1"]
-    params: list[object] = []
+    params: List[Any] = []
 
     if status:
         where.append("i.status = ?")
@@ -640,7 +642,7 @@ def get_train_readiness(min_samples_per_class: int = 10) -> dict:
     }
 
 
-def get_random_unlabeled_images(limit: int = 20) -> list[dict]:
+def get_random_unlabeled_images(limit: int = 20) -> List[Dict[str, Any]]:
     safe_limit = min(200, max(1, int(limit)))
     with get_conn() as conn:
         rows = conn.execute(

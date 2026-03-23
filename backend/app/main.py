@@ -1,7 +1,7 @@
 import json
 import mimetypes
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -101,7 +101,7 @@ def api_data_import(req: ImportRequest) -> ImportResponse:
 
 
 @app.post("/api/data/upload-files", response_model=ImportResponse)
-def api_data_upload_files(files: list[UploadFile] = File(...)) -> ImportResponse:
+def api_data_upload_files(files: List[UploadFile] = File(...)) -> ImportResponse:
     if not files:
         return ImportResponse(imported=0, duplicates=0, skipped=0)
     result = import_uploaded_files(files)
@@ -142,7 +142,7 @@ def api_images(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=200),
     status: Optional[str] = Query(default=None),
-    label: Optional[str] = Query(default=None, pattern="^(target_plant|other)$"),
+    label: Optional[str] = Query(default=None, regex="^(target_plant|other)$"),
     reviewed: Optional[bool] = Query(default=None),
     keyword: Optional[str] = Query(default=None),
 ) -> dict:
@@ -276,7 +276,7 @@ def api_infer_status(job_id: int) -> dict:
 
 
 @app.get("/api/infer/{job_id}/export")
-def api_infer_export(job_id: int, format: str = Query(default="csv", pattern="^(csv|json)$")):
+def api_infer_export(job_id: int, format: str = Query(default="csv", regex="^(csv|json)$")):
     with get_conn() as conn:
         row = conn.execute("SELECT output_csv, output_json FROM infer_jobs WHERE id=?", (job_id,)).fetchone()
     if not row:
@@ -297,8 +297,8 @@ def api_infer_export(job_id: int, format: str = Query(default="csv", pattern="^(
 @app.get("/api/infer/{job_id}/results/review")
 def api_infer_results_review(
     job_id: int,
-    sort_order: str = Query(default="asc", pattern="^(asc|desc)$"),
-    predicted_class: Optional[str] = Query(default=None, pattern="^(target_plant|other)$"),
+    sort_order: str = Query(default="asc", regex="^(asc|desc)$"),
+    predicted_class: Optional[str] = Query(default=None, regex="^(target_plant|other)$"),
     limit: int = Query(default=1000, ge=1, le=5000),
 ) -> dict:
     try:

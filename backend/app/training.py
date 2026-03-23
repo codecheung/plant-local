@@ -2,7 +2,7 @@ import json
 import random
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 
 from .config import MODELS_DIR, SPLIT_TRAIN_DIR, SPLIT_VAL_DIR
 from .db import get_conn
@@ -26,7 +26,7 @@ def prepare_train_val_split(train_ratio: float = 0.8) -> dict:
             """
         ).fetchall()
 
-    buckets: dict[str, list[Path]] = {"target_plant": [], "other": []}
+    buckets: Dict[str, List[Path]] = {"target_plant": [], "other": []}
     for r in rows:
         p = Path(r["storage_path"])
         if p.exists():
