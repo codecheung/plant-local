@@ -428,17 +428,23 @@ def save_labels_with_history(items: List[Dict[str, Any]]) -> Dict[str, Any]:
             old_label = old["label"] if old else None
             old_reviewed = int(old["reviewed"]) if old else None
 
+            now = now_ts()
             cur.execute(
                 """
-                INSERT INTO labels (image_id, label, reviewed, updated_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(image_id) DO UPDATE SET
-                    label=excluded.label,
-                    reviewed=excluded.reviewed,
-                    updated_at=excluded.updated_at
+                UPDATE labels
+                SET label=?, reviewed=?, updated_at=?
+                WHERE image_id=?
                 """,
-                (image_id, label, reviewed, now_ts()),
+                (label, reviewed, now, image_id),
             )
+            if cur.rowcount == 0:
+                cur.execute(
+                    """
+                    INSERT INTO labels (image_id, label, reviewed, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (image_id, label, reviewed, now),
+                )
             cur.execute("UPDATE images SET status='labeled' WHERE id=?", (image_id,))
             cur.execute(
                 """
@@ -492,17 +498,24 @@ def undo_label_operations(steps: int = 1) -> dict:
                 cur.execute("DELETE FROM labels WHERE image_id=?", (image_id,))
                 cur.execute("UPDATE images SET status='imported' WHERE id=?", (image_id,))
             else:
+                now = now_ts()
+                old_reviewed_int = int(old_reviewed or 0)
                 cur.execute(
                     """
-                    INSERT INTO labels (image_id, label, reviewed, updated_at)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(image_id) DO UPDATE SET
-                        label=excluded.label,
-                        reviewed=excluded.reviewed,
-                        updated_at=excluded.updated_at
+                    UPDATE labels
+                    SET label=?, reviewed=?, updated_at=?
+                    WHERE image_id=?
                     """,
-                    (image_id, old_label, int(old_reviewed or 0), now_ts()),
+                    (old_label, old_reviewed_int, now, image_id),
                 )
+                if cur.rowcount == 0:
+                    cur.execute(
+                        """
+                        INSERT INTO labels (image_id, label, reviewed, updated_at)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (image_id, old_label, old_reviewed_int, now),
+                    )
                 cur.execute("UPDATE images SET status='labeled' WHERE id=?", (image_id,))
             reverted_ids.add(image_id)
 
