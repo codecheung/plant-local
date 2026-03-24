@@ -78,6 +78,13 @@ def favicon() -> FileResponse:
     return FileResponse(path)
 
 
+def _spa_index() -> FileResponse:
+    index = STATIC_DIR / "index.html"
+    if not index.exists():
+        raise HTTPException(status_code=404, detail="UI file not found")
+    return FileResponse(index)
+
+
 static_assets = STATIC_DIR / "static"
 if static_assets.is_dir():
     app.mount(
@@ -351,3 +358,11 @@ def api_model_list() -> dict:
                 item["metrics"] = None
         items.append(item)
     return {"items": items}
+
+
+@app.get("/{full_path:path}")
+def spa_fallback(full_path: str) -> FileResponse:
+    # History 路由刷新时，返回前端入口页面；保留 API 的 404 语义
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="API not found")
+    return _spa_index()
